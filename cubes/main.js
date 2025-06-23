@@ -4,7 +4,8 @@ const adapter = await navigator.gpu.requestAdapter();
 const device = await adapter.requestDevice();
 const context = canvas.getContext('webgpu');
 
-const dpr = window.devicePixelRatio || 1;
+// lower device pixel ratio to lighten GPU load
+const dpr = 1;
 canvas.width = canvas.clientWidth * dpr;
 canvas.height = canvas.clientHeight * dpr;
 
@@ -15,21 +16,26 @@ context.configure({
   alphaMode: 'opaque'
 });
 
-// Camera control
-const cameraPos = [100, 100, 100];
+// Camera control - orbit camera around the origin
+let radius = 170;
+let yaw = Math.PI / 4;
+const cameraPos = [radius * Math.sin(yaw), 100, radius * Math.cos(yaw)];
 const keyState = {};
 const cameraSpeed = 50;
 let lastTime = 0;
+let accum = 0;
 
 window.addEventListener('keydown', (e) => { keyState[e.key.toLowerCase()] = true; });
 window.addEventListener('keyup', (e) => { keyState[e.key.toLowerCase()] = false; });
 
 function updateCamera(dt) {
   const step = cameraSpeed * dt;
-  if (keyState['w']) cameraPos[2] -= step;
-  if (keyState['s']) cameraPos[2] += step;
-  if (keyState['a']) cameraPos[0] -= step;
-  if (keyState['d']) cameraPos[0] += step;
+  if (keyState['w']) radius = Math.max(10, radius - step);
+  if (keyState['s']) radius += step;
+  if (keyState['a']) yaw += step * 0.01;
+  if (keyState['d']) yaw -= step * 0.01;
+  cameraPos[0] = radius * Math.sin(yaw);
+  cameraPos[2] = radius * Math.cos(yaw);
 }
 
 const shaderCode = await (await fetch('shaders.wgsl')).text();
@@ -69,7 +75,7 @@ function createBuffer(arr, usage) {
 const vertexBuffer = createBuffer(cubeVerts, GPUBufferUsage.VERTEX);
 const indexBuffer = createBuffer(cubeIndices, GPUBufferUsage.INDEX);
 
-const gridSize = 40;
+const gridSize = 20;
 const spacing = 2;
 const numInstances = gridSize ** 3;
 
@@ -153,23 +159,28 @@ function mat4Perspective(out, fovy, aspect, near, far) {
 }
 
 function mat4LookAt(out, eye, center, up) {
-  const z = [eye[0] - center[0], eye[1] - center[1], eye[2] - center[2]];
-  const zn = Math.hypot(...z);
-  const z0 = z[0] / zn, z1 = z[1] / zn, z2 = z[2] / zn;
+  let x0, x1, x2, y0, y1, y2, z0, z1, z2, len;
 
-  const x0 = up[1] * z2 - up[2] * z1;
-  const x1 = up[2] * z0 - up[0] * z2;
-  const x2 = up[0] * z1 - up[1] * z0;
-  const xn = Math.hypot(x0, x1, x2);
+  z0 = eye[0] - center[0];
+  z1 = eye[1] - center[1];
+  z2 = eye[2] - center[2];
+  len = Math.hypot(z0, z1, z2);
+  z0 /= len; z1 /= len; z2 /= len;
 
-  const y0 = z1 * x2 - z2 * x1;
-  const y1 = z2 * x0 - z0 * x2;
-  const y2 = z0 * x1 - z1 * x0;
+  x0 = up[1] * z2 - up[2] * z1;
+  x1 = up[2] * z0 - up[0] * z2;
+  x2 = up[0] * z1 - up[1] * z0;
+  len = Math.hypot(x0, x1, x2);
+  x0 /= len; x1 /= len; x2 /= len;
 
-  out[0] = x0 / xn; out[1] = y0; out[2] = z0; out[3] = 0;
-  out[4] = x1 / xn; out[5] = y1; out[6] = z1; out[7] = 0;
-  out[8] = x2 / xn; out[9] = y2; out[10] = z2; out[11] = 0;
-  out[12] = -(x0 * eye[0] + x1 * eye[1] + x2 * eye[2]) / xn;
+  y0 = z1 * x2 - z2 * x1;
+  y1 = z2 * x0 - z0 * x2;
+  y2 = z0 * x1 - z1 * x0;
+
+  out[0] = x0; out[1] = y0; out[2] = z0; out[3] = 0;
+  out[4] = x1; out[5] = y1; out[6] = z1; out[7] = 0;
+  out[8] = x2; out[9] = y2; out[10] = z2; out[11] = 0;
+  out[12] = -(x0 * eye[0] + x1 * eye[1] + x2 * eye[2]);
   out[13] = -(y0 * eye[0] + y1 * eye[1] + y2 * eye[2]);
   out[14] = -(z0 * eye[0] + z1 * eye[1] + z2 * eye[2]);
   out[15] = 1;
@@ -199,6 +210,12 @@ function frame(timeMs) {
   const dt = (timeMs - lastTime) / 1000;
   lastTime = timeMs;
   updateCamera(dt);
+  accum += dt;
+  if (accum < 1 / 30) {
+    requestAnimationFrame(frame);
+    return;
+  }
+  accum = 0;
   updateVPMatrix();
 
   const cmd = device.createCommandEncoder();
