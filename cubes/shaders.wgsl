@@ -1,14 +1,14 @@
 struct VPUniforms {
-    vpMatrix : mat4x4<f32>;
+	vpMatrix: mat4x4<f32>
 };
 
 struct ColorInstance {
-    rgbaOffset : vec4<f32>; // xyz = color, w = time offset
+    rgbaOffset : vec4<f32> // xyz = color, w = time offset
 };
 
 struct SimParams {
-    time : f32;
-    count : u32;
+    time : f32,
+    count : u32
 };
 
 @group(0) @binding(0) var<uniform> vp : VPUniforms;
@@ -16,15 +16,15 @@ struct SimParams {
 @group(1) @binding(1) var<uniform> sim : SimParams;
 
 struct VertexInput {
-    @location(0) position : vec3<f32>;
-    @location(1) instancePos : vec3<f32>;
-    @location(2) color : vec4<f32>;
-    @builtin(instance_index) instanceIndex : u32;
+    @location(0) position : vec3<f32>,
+    @location(1) instancePos : vec3<f32>,
+    @location(2) color : vec4<f32>,
+    @builtin(instance_index) instanceIndex : u32
 };
 
 struct VertexOutput {
-    @builtin(position) pos : vec4<f32>;
-    @location(0) color : vec3<f32>;
+    @builtin(position) pos : vec4<f32>,
+    @location(0) color : vec3<f32>
 };
 
 @vertex

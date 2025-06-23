@@ -124,7 +124,8 @@ const pipeline = device.createRenderPipeline({
     topology: 'triangle-list',
     cullMode: 'back'
   },
-  depthStencil: {
+  depthStencil: 
+  {
     format: 'depth24plus',
     depthWriteEnabled: true,
     depthCompare: 'less'
@@ -147,14 +148,12 @@ const vpBindGroup = device.createBindGroup({
   entries: [{ binding: 0, resource: { buffer: vpBuffer } }]
 });
 
-const simBindGroup = device.createBindGroup({
-  layout: computePipeline.getBindGroupLayout(1),
-  entries: [{ binding: 1, resource: { buffer: simBuffer } }]
-});
-
-const colorBindGroup = device.createBindGroup({
-  layout: computePipeline.getBindGroupLayout(0),
-  entries: [{ binding: 0, resource: { buffer: colorBuffer } }]
+const computeBindGroup = device.createBindGroup({
+  layout: computePipeline.getBindGroupLayout(1), // group(1)
+  entries: [
+    { binding: 0, resource: { buffer: colorBuffer } },
+    { binding: 1, resource: { buffer: simBuffer } }
+  ]
 });
 
 // Matrices
@@ -245,8 +244,7 @@ function frame(timeMs) {
 
   const passCompute = commandEncoder.beginComputePass();
   passCompute.setPipeline(computePipeline);
-  passCompute.setBindGroup(0, colorBindGroup);
-  passCompute.setBindGroup(1, simBindGroup);
+  passCompute.setBindGroup(1, computeBindGroup); 
   const wgCount = Math.ceil(numInstances / 64);
   passCompute.dispatchWorkgroups(wgCount);
   passCompute.end();
