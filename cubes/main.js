@@ -15,6 +15,23 @@ context.configure({
   alphaMode: 'opaque'
 });
 
+// Camera control
+const cameraPos = [100, 100, 100];
+const keyState = {};
+const cameraSpeed = 50;
+let lastTime = 0;
+
+window.addEventListener('keydown', (e) => { keyState[e.key.toLowerCase()] = true; });
+window.addEventListener('keyup', (e) => { keyState[e.key.toLowerCase()] = false; });
+
+function updateCamera(dt) {
+  const step = cameraSpeed * dt;
+  if (keyState['w']) cameraPos[2] -= step;
+  if (keyState['s']) cameraPos[2] += step;
+  if (keyState['a']) cameraPos[0] -= step;
+  if (keyState['d']) cameraPos[0] += step;
+}
+
 const shaderCode = await (await fetch('shaders.wgsl')).text();
 const shaderModule = device.createShaderModule({ code: shaderCode });
 
@@ -57,7 +74,7 @@ const spacing = 2;
 const numInstances = gridSize ** 3;
 
 const positions = new Float32Array(numInstances * 3);
-const offsets = new Float32Array(numInstances);
+const colors = new Float32Array(numInstances * 3);
 
 let i = 0;
 for (let x = 0; x < gridSize; x++) {
@@ -66,17 +83,18 @@ for (let x = 0; x < gridSize; x++) {
       positions[i * 3 + 0] = (x - gridSize / 2) * spacing;
       positions[i * 3 + 1] = (y - gridSize / 2) * spacing;
       positions[i * 3 + 2] = (z - gridSize / 2) * spacing;
-      offsets[i] = Math.random() * 1000.0;
+      colors[i * 3 + 0] = 1.0;
+      colors[i * 3 + 1] = 1.0;
+      colors[i * 3 + 2] = 1.0;
       i++;
     }
   }
 }
 
 const instanceBuffer = createBuffer(positions, GPUBufferUsage.VERTEX);
-const offsetBuffer = createBuffer(offsets, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST);
+const colorBuffer = createBuffer(colors, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST);
 
 const vpBuffer = device.createBuffer({ size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-const simBuffer = device.createBuffer({ size: 8, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
 
 const pipeline = device.createRenderPipeline({
   layout: 'auto',
@@ -108,24 +126,11 @@ const pipeline = device.createRenderPipeline({
   }
 });
 
-const computePipeline = device.createComputePipeline({
-  layout: 'auto',
-  compute: { module: shaderModule, entryPoint: 'cs_main' }
-});
-
 const vpBindGroup = device.createBindGroup({
   layout: pipeline.getBindGroupLayout(0),
   entries: [
     { binding: 0, resource: { buffer: vpBuffer } },
-    { binding: 1, resource: { buffer: offsetBuffer } }
-  ]
-});
-
-const computeBindGroup = device.createBindGroup({
-  layout: computePipeline.getBindGroupLayout(1),
-  entries: [
-    { binding: 0, resource: { buffer: offsetBuffer } },
-    { binding: 1, resource: { buffer: simBuffer } }
+    { binding: 1, resource: { buffer: colorBuffer } }
   ]
 });
 
@@ -171,7 +176,7 @@ function mat4LookAt(out, eye, center, up) {
 }
 
 function updateVPMatrix() {
-  const eye = [100, 100, 100];
+  const eye = cameraPos;
   const center = [0, 0, 0];
   const up = [0, 1, 0];
   mat4Perspective(perspective, Math.PI / 4, canvas.width / canvas.height, 0.1, 2000);
@@ -191,17 +196,12 @@ function updateVPMatrix() {
 }
 
 function frame(timeMs) {
-  const t = timeMs / 1000;
+  const dt = (timeMs - lastTime) / 1000;
+  lastTime = timeMs;
+  updateCamera(dt);
   updateVPMatrix();
-  device.queue.writeBuffer(simBuffer, 0, new Float32Array([t, numInstances]));
 
   const cmd = device.createCommandEncoder();
-
-  const compute = cmd.beginComputePass();
-  compute.setPipeline(computePipeline);
-  compute.setBindGroup(1, computeBindGroup);
-  compute.dispatchWorkgroups(Math.ceil(numInstances / 64));
-  compute.end();
 
   const render = cmd.beginRenderPass({
     colorAttachments: [{
