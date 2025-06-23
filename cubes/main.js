@@ -3,6 +3,7 @@ const canvas = document.getElementById('gfx');
 const adapter = await navigator.gpu.requestAdapter();
 const device = await adapter.requestDevice();
 const context = canvas.getContext('webgpu');
+const stats = document.getElementById('stats');
 
 // lower device pixel ratio to lighten GPU load
 const dpr = 1;
@@ -24,6 +25,8 @@ const keyState = {};
 const cameraSpeed = 50;
 let lastTime = 0;
 let accum = 0;
+let frames = 0;
+let lastFpsUpdate = 0;
 
 window.addEventListener('keydown', (e) => { keyState[e.key.toLowerCase()] = true; });
 window.addEventListener('keyup', (e) => { keyState[e.key.toLowerCase()] = false; });
@@ -216,6 +219,7 @@ function frame(timeMs) {
     return;
   }
   accum = 0;
+  frames++;
   updateVPMatrix();
 
   const cmd = device.createCommandEncoder();
@@ -244,6 +248,13 @@ function frame(timeMs) {
   render.end();
 
   device.queue.submit([cmd.finish()]);
+
+  if (timeMs - lastFpsUpdate > 500) {
+    const fps = (frames * 1000) / (timeMs - lastFpsUpdate);
+    stats.textContent = `FPS: ${fps.toFixed(1)} | Rendered: ${numInstances} | Total: ${numInstances}`;
+    frames = 0;
+    lastFpsUpdate = timeMs;
+  }
   requestAnimationFrame(frame);
 }
 
