@@ -1,9 +1,6 @@
-struct VPUniforms {
-	vpMatrix: mat4x4<f32>
-};
 
-struct ColorInstance {
-    rgbaOffset : vec4<f32> // xyz = color, w = time offset
+struct VPUniforms {
+    vpMatrix: mat4x4<f32>
 };
 
 struct SimParams {
@@ -12,13 +9,14 @@ struct SimParams {
 };
 
 @group(0) @binding(0) var<uniform> vp : VPUniforms;
-@group(1) @binding(0) var<storage, read_write> colors : array<ColorInstance>;
+@group(0) @binding(1) var<storage, read> colorBuffer : array<vec3<f32>>;
+
+@group(1) @binding(0) var<storage, read_write> colorBufferRW : array<vec3<f32>>;
 @group(1) @binding(1) var<uniform> sim : SimParams;
 
 struct VertexInput {
     @location(0) position : vec3<f32>,
     @location(1) instancePos : vec3<f32>,
-    @location(2) color : vec4<f32>,
     @builtin(instance_index) instanceIndex : u32
 };
 
@@ -32,7 +30,7 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     var out : VertexOutput;
     let modelPos = input.position + input.instancePos;
     out.pos = vp.vpMatrix * vec4<f32>(modelPos, 1.0);
-    out.color = input.color.xyz;
+    out.color = colorBuffer[input.instanceIndex];
     return out;
 }
 
@@ -45,10 +43,12 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
 fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let i = gid.x;
     if (i >= sim.count) { return; }
-    var c = colors[i].rgbaOffset;
-    let t = sim.time + c.w;
-    c.x = 0.5 + 0.5 * sin(t);
-    c.y = 0.5 + 0.5 * sin(t + 2.094); // offset phases
-    c.z = 0.5 + 0.5 * sin(t + 4.188);
-    colors[i].rgbaOffset = c;
+
+    let t = sim.time + f32(i) * 0.0005; // simulate offset
+    let phase = 2.094395; // 2π / 3
+
+    colorBufferRW[i].x = 0.5 + 0.5 * sin(t);
+    colorBufferRW[i].y = 0.5 + 0.5 * sin(t + phase);
+    colorBufferRW[i].z = 0.5 + 0.5 * sin(t + phase * 2.0);
 }
+
